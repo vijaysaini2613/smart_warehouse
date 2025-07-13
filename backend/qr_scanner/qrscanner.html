@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+  <title>QR Inventory Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #f2f2f2;
+      text-align: center;
+    }
+
+    #reader {
+      max-width: 300px;
+      margin: auto;
+    }
+
+    button {
+      margin: 10px;
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    pre {
+      background: #fff;
+      padding: 10px;
+      border-radius: 6px;
+      max-width: 90%;
+      margin: auto;
+      text-align: left;
+    }
+
+    #response {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>📷 Smart Inventory QR Scanner</h2>
+  <div id="reader"></div>
+  <h3>Scanned Data:</h3>
+  <pre id="result">Waiting for QR scan...</pre>
+
+  <button onclick="sendToBackend(API_BATCH_URL)">➕ Add to Inventory</button>
+  <button onclick="sendToBackend(API_DELETE_URL)">❌ Delete Scanned Batch</button>
+  <button onclick="reduceStock()">📉 Reduce Stock</button>
+
+  <p id="response"></p>
+
+  <script>
+    const API_BATCH_URL = "http://10.102.142.75:5000/api/batch";
+    const API_DELETE_URL = "http://10.102.142.75:5000/api/delete";
+    const API_REDUCE_STOCK_URL = "http://10.102.142.75:5000/api/reduce_stock";
+
+    let scannedData = null;
+
+    function onScanSuccess(qrCodeMessage) {
+      document.getElementById('result').innerText = qrCodeMessage;
+      try {
+        scannedData = JSON.parse(qrCodeMessage);
+        document.getElementById('response').innerText = "";
+      } catch (e) {
+        scannedData = null;
+        document.getElementById('response').innerText = "❌ Invalid QR format";
+      }
+    }
+
+    function sendToBackend(endpoint) {
+      if (!scannedData) return alert("⚠️ Please scan a valid QR first.");
+
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(scannedData)
+      })
+        .then(res => res.json())
+        .then(data => document.getElementById('response').innerText = data.message)
+        .catch(err => {
+          console.error("Fetch error:", err);
+          document.getElementById('response').innerText = "❌ Error connecting to backend";
+        });
+    }
+
+    function reduceStock() {
+      if (!scannedData || !scannedData.batch_id) return alert("⚠️ QR must contain a valid 'batch_id'");
+
+      fetch(API_REDUCE_STOCK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: scannedData.batch_id })
+      })
+        .then(res => res.json())
+        .then(data => document.getElementById('response').innerText = data.message)
+        .catch(err => {
+          console.error("Reduce stock error:", err);
+          document.getElementById('response').innerText = "❌ Error reducing stock";
+        });
+    }
+
+    Html5Qrcode.getCameras().then(cameras => {
+      if (cameras.length) {
+        const scanner = new Html5Qrcode("reader");
+        scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess)
+          .catch(err => document.getElementById("result").innerText = "❌ Scanner error: " + err);
+      } else {
+        document.getElementById("result").innerText = "❌ No cameras found.";
+      }
+    }).catch(err => {
+      document.getElementById("result").innerText = "❌ Cannot access camera: " + err;
+    });
+  </script>
+</body>
+
+</html>
